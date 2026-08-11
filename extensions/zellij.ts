@@ -7,16 +7,6 @@ export interface PiInvocation {
   args: string[];
 }
 
-export interface ZellijCompletion {
-  exitCode: number;
-  signal: NodeJS.Signals | null;
-  error?: string;
-}
-
-export interface ZellijLaunch {
-  completion: Promise<ZellijCompletion>;
-}
-
 /** Match Pi's own subagent example so packaged, source, and binary installs work. */
 export function getPiInvocation(args: string[]): PiInvocation {
   const currentScript = process.argv[1];
@@ -38,16 +28,12 @@ export function isZellijAvailable(): boolean {
   return !result.error && result.status === 0;
 }
 
-/**
- * Launch a command directly in a Zellij pane and resolve only after that pane's
- * command exits. This is the direct-command equivalent of the create/watch flow
- * in ../pi-interactive-subagents/pi-extension/subagents/cmux.ts.
- */
+/** Launch a command in a detached Zellij pane without watching for its result. */
 export function launchZellijPane(options: {
   name: string;
   cwd: string;
   invocation: PiInvocation;
-}): ZellijLaunch {
+}): void {
   const args = [
     "action",
     "new-pane",
@@ -56,7 +42,6 @@ export function launchZellijPane(options: {
     "--cwd",
     options.cwd,
     "--close-on-exit",
-    "--block-until-exit",
     "--",
     options.invocation.command,
     ...options.invocation.args,
@@ -68,24 +53,8 @@ export function launchZellijPane(options: {
     stdio: "ignore",
   });
 
-  // A running sub-agent must not prevent the parent Pi process from shutting down.
+  // Availability was checked before launch; swallow a late spawn error so the
+  // detached launcher cannot crash the parent session.
+  child.once("error", () => {});
   child.unref();
-
-  const completion = new Promise<ZellijCompletion>((resolve) => {
-    let settled = false;
-    const finish = (result: ZellijCompletion) => {
-      if (settled) return;
-      settled = true;
-      resolve(result);
-    };
-
-    child.once("error", (error) => {
-      finish({ exitCode: 1, signal: null, error: error.message });
-    });
-    child.once("close", (code, signal) => {
-      finish({ exitCode: code ?? (signal ? 1 : 0), signal });
-    });
-  });
-
-  return { completion };
 }

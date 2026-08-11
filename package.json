@@ -1,7 +1,7 @@
 {
   "name": "pi-subagents",
   "version": "0.1.0",
-  "description": "Interactive Zellij sub-agents for pi with asynchronous result delivery",
+  "description": "Interactive Zellij sub-agents for pi",
   "type": "module",
   "license": "MIT",
   "keywords": [

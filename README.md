@@ -9,7 +9,7 @@ It registers exactly two slash commands:
 | `/sub-agents [initial prompt]` | Opens a fresh interactive Pi session in a new Zellij panel. |
 | `/fork-agent [initial prompt]` | Opens an interactive fork of the parent session in a new Zellij panel. |
 
-The child stays interactive until you exit Pi in its panel (normally `Ctrl+D`). Its last new assistant response is then steered into the parent as an asynchronous notification with `triggerTurn: true`, so the parent agent immediately processes it.
+The child stays interactive until you exit Pi in its panel (normally `Ctrl+D`). Parent and child sessions remain independent; exiting the child does not send a message to or trigger a turn in the parent.
 
 ## Cache-friendly forks
 
@@ -55,7 +55,7 @@ Omit the text to open a child that waits for input.
 
 ## Design reference
 
-The Zellij spawning and asynchronous handoff design is based on the neighboring MIT-licensed `../pi-interactive-subagents` project, especially:
+The Zellij spawning design is based on the neighboring MIT-licensed `../pi-interactive-subagents` project, especially:
 
 - `pi-extension/subagents/cmux.ts`
 - `pi-extension/subagents/index.ts`

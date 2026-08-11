@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
-import { findChildResult, seedChildSession } from "../extensions/session.ts";
+import { seedChildSession } from "../extensions/session.ts";
 
 const tempDirs: string[] = [];
 
@@ -55,7 +55,6 @@ describe("seedChildSession", () => {
     const header = JSON.parse(lines[0]);
 
     assert.equal(lines.length, 1);
-    assert.equal(seeded.baselineLineCount, 1);
     assert.equal(header.type, "session");
     assert.equal(header.version, 3);
     assert.equal(header.cwd, "/project");
@@ -76,33 +75,7 @@ describe("seedChildSession", () => {
     });
     const lines = readFileSync(seeded.sessionFile, "utf8").trim().split("\n");
 
-    assert.equal(seeded.baselineLineCount, 3);
     assert.equal(JSON.parse(lines[0]).parentSession, "/sessions/parent.jsonl");
     assert.deepEqual(lines.slice(1).map((line) => JSON.parse(line)), entries);
-  });
-});
-
-describe("findChildResult", () => {
-  it("ignores inherited assistant messages and returns the child's latest response", () => {
-    const sessionDir = makeTempDir();
-    const inherited = [messageEntry("aaaaaaaa", null, "assistant", "inherited")];
-    const seeded = seedChildSession({ cwd: "/project", sessionDir, entries: inherited });
-
-    appendFileSync(
-      seeded.sessionFile,
-      `${JSON.stringify(messageEntry("bbbbbbbb", "aaaaaaaa", "assistant", "first child result"))}\n`,
-    );
-    appendFileSync(
-      seeded.sessionFile,
-      `${JSON.stringify(messageEntry("cccccccc", "bbbbbbbb", "assistant", "final child result"))}\n`,
-    );
-
-    assert.equal(findChildResult(seeded.sessionFile, seeded.baselineLineCount), "final child result");
-  });
-
-  it("returns null when the child exits without a new assistant response", () => {
-    const sessionDir = makeTempDir();
-    const seeded = seedChildSession({ cwd: "/project", sessionDir });
-    assert.equal(findChildResult(seeded.sessionFile, seeded.baselineLineCount), null);
   });
 });
