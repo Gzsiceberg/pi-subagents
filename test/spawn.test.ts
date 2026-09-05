@@ -1,4 +1,11 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+
+function piArgs(call: string[]): string[] {
+  assert.deepEqual(call.slice(0, 2), ["pane", "run"]);
+  return execFileSync("sh", ["-c", `pi() { printf '%s\\0' "$@"; }; ${call[3]}`])
+    .toString().split("\0").slice(0, -1);
+}
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,8 +47,8 @@ describe("Herdr command integration", () => {
         calls.push(args);
         return {
           stdout: args[0] === "pane" ? '{"result":{"pane":{"pane_id":"w1:p2"}}}' : "{}",
-          stderr: failStart && args[1] === "start" ? "agent_not_ready" : "",
-          code: failStart && args[1] === "start" ? 1 : 0,
+          stderr: failStart && args[1] === "run" ? "submission_failed" : "",
+          code: failStart && args[1] === "run" ? 1 : 0,
           killed: false,
         };
       },
@@ -62,38 +69,38 @@ describe("Herdr command integration", () => {
     return { commands, calls, ctx, notifications, entries };
   }
 
-  it("shares the alias handler, seeds the exact branch, and prompts only after startup", async () => {
+  it("shares the alias handler, seeds the exact branch, and includes the startup prompt", async () => {
     const { commands, calls, ctx, notifications, entries } = setup();
     assert.equal(commands.get("branch")!.handler, commands.get("fork-agent")!.handler);
     await commands.get("branch")!.handler("  Review this\ncarefully  ", ctx);
-    const start = calls[2];
+    const start = piArgs(calls[2]);
     const sessionFile = start[start.indexOf("--session") + 1];
     const [header, ...copied] = readFileSync(sessionFile, "utf8").trim().split("\n").map(line => JSON.parse(line));
     assert.equal(header.parentSession, "/sessions/parent.jsonl");
     assert.deepEqual(copied, entries);
-    assert.deepEqual(start.slice(start.indexOf("--model")), ["--model", "test/model", "--thinking", "high", "--tools", "read,bash"]);
-    assert.equal(calls[3].at(-1), "Review this\ncarefully");
+    assert.deepEqual(start.slice(start.indexOf("--model")), ["--model", "test/model", "--thinking", "high", "--tools", "read,bash", "--", "Review this\ncarefully"]);
+    assert.equal(calls.length, 3);
     assert.equal(notifications.at(-1)?.level, "info");
-    assert.match(notifications.at(-1)!.message, /branch-.*w1:p2/);
+    assert.match(notifications.at(-1)!.message, /launch submitted in w1:p2/);
   });
 
   it("seeds an empty standalone session without sending an empty prompt", async () => {
     const { commands, calls, ctx } = setup();
     await commands.get("sub-agents")!.handler("   ", ctx);
     assert.equal(calls.length, 3);
-    const start = calls[2];
+    const start = piArgs(calls[2]);
     const lines = readFileSync(start[start.indexOf("--session") + 1], "utf8").trim().split("\n");
     assert.equal(lines.length, 1);
     assert.equal(JSON.parse(lines[0]).parentSession, undefined);
   });
 
-  it("reports startup failure without success and retains the recoverable session", async () => {
+  it("reports submission failure without success and retains the recoverable session", async () => {
     const { commands, calls, ctx, notifications } = setup(true);
     await commands.get("branch")!.handler("work", ctx);
     assert.equal(calls.length, 3);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].level, "error");
-    assert.match(notifications[0].message, /agent_not_ready/);
+    assert.match(notifications[0].message, /submission_failed/);
     assert.match(notifications[0].message, /Child session kept at/);
     assert.equal(readdirSync(dir).length, 1);
   });

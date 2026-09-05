@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { describe, it } from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { chooseSplitDirection, isHerdrEnvironment, launchHerdrAgent } from "../extensions/herdr.ts";
+import { buildHerdrPiCommand, chooseSplitDirection, isHerdrEnvironment, launchHerdrAgent } from "../extensions/herdr.ts";
 
 const env = { HERDR_PANE_ID: "w6:p1", HERDR_BIN_PATH: "/opt/herdr bin/herdr" };
 const options = {
   cwd: "/project with spaces",
   piArgs: ["--session", "/sessions/child.jsonl", "--model", "provider/model", "--no-tools"],
-  mode: "fork" as const,
 };
 const success = (stdout = "{}") => ({ stdout, stderr: "", code: 0, killed: false });
 const split = success(JSON.stringify({ result: { pane: { pane_id: "w6:p42" } } }));
 
-function fakeExec(results = [split, success(), success()]) {
+function fakeExec(results = [split, success()]) {
   const calls: { command: string; args: string[]; options: unknown }[] = [];
   const exec: ExtensionAPI["exec"] = async (command, args, options) => {
     calls.push({ command, args, options });
@@ -68,18 +68,17 @@ describe("adaptive Herdr splits", () => {
   });
 });
 
-describe("Herdr native launch", () => {
+describe("Herdr direct launch", () => {
   it("requires a pane environment, not merely an installed CLI/socket", () => {
     assert.equal(isHerdrEnvironment({}), false);
     assert.equal(isHerdrEnvironment({ HERDR_SOCKET_PATH: "/tmp/herdr.sock" }), false);
     assert.equal(isHerdrEnvironment(env), true);
   });
 
-  it("splits, awaits readiness, then sends a literal prompt without waiting for work", async () => {
+  it("splits and submits Pi with its literal prompt without agent readiness calls", async () => {
     const { exec, calls } = fakeExec();
     const prompt = "--review 'quotes' $(touch /tmp/nope)\nsecond line";
     const child = await launchHerdrAgent({ ...options, initialPrompt: prompt }, exec, env);
-    assert.match(child.name, /^branch-[a-z0-9-]+$/);
     assert.equal(child.paneId, "w6:p42");
     assert.deepEqual(calls, [
       {
@@ -94,26 +93,19 @@ describe("Herdr native launch", () => {
       },
       {
         command: env.HERDR_BIN_PATH,
-        args: ["agent", "start", child.name, "--kind", "pi", "--pane", "w6:p42", "--timeout", "30000", "--", ...options.piArgs],
-        options: { cwd: options.cwd, timeout: 35_000 },
-      },
-      {
-        command: env.HERDR_BIN_PATH,
-        args: ["agent", "prompt", child.name, prompt],
+        args: ["pane", "run", child.paneId, buildHerdrPiCommand({ ...options, initialPrompt: prompt })],
         options: { cwd: options.cwd, timeout: 15_000 },
       },
     ]);
   });
 
-  it("opens fresh agents with unique names and no injected prompt", async () => {
-    const first = fakeExec([split, success()]);
-    const second = fakeExec([split, success()]);
-    const a = await launchHerdrAgent({ ...options, mode: "standalone" }, first.exec, { HERDR_PANE_ID: "w1:p1" });
-    const b = await launchHerdrAgent({ ...options, mode: "standalone" }, second.exec, env);
-    assert.match(a.name, /^agent-[a-z0-9-]+$/);
-    assert.notEqual(a.name, b.name);
-    assert.equal(first.calls.length, 3);
-    assert.equal(first.calls[0].command, "herdr");
+  it("opens without an injected prompt and falls back to herdr on PATH", async () => {
+    const { exec, calls } = fakeExec();
+    await launchHerdrAgent(options, exec, { HERDR_PANE_ID: "w1:p1" });
+    assert.equal(calls.length, 3);
+    assert.equal(calls[0].command, "herdr");
+    assert.equal(calls[2].args[3], buildHerdrPiCommand(options));
+    assert.ok(!calls[2].args[3].endsWith("'--'"));
   });
 
   it("accepts opaque non-numeric pane IDs returned by Herdr", async () => {
@@ -135,7 +127,7 @@ describe("Herdr native launch", () => {
     { stdout: "", stderr: '{"error":{"code":"agent_not_ready"}}', code: 1, killed: false },
     { stdout: "", stderr: "", code: 0, killed: true },
   ]) {
-    it(`keeps the pane and never prompts after startup failure: ${JSON.stringify(failure)}`, async () => {
+    it(`keeps the pane and never retries after submission failure: ${JSON.stringify(failure)}`, async () => {
       const { exec, calls } = fakeExec([split, failure]);
       await assert.rejects(
         launchHerdrAgent({ ...options, initialPrompt: "do work" }, exec, env),
@@ -145,10 +137,18 @@ describe("Herdr native launch", () => {
     });
   }
 
-  it("does not retry a rejected prompt or close the potentially live agent", async () => {
-    const { exec, calls } = fakeExec([split, success(), { stdout: "", stderr: "agent_blocked", code: 1, killed: false }]);
-    await assert.rejects(launchHerdrAgent({ ...options, initialPrompt: "work" }, exec, env), /agent_blocked/);
-    assert.equal(calls.length, 4);
+  it("round trips shell metacharacters, quotes, spaces, and newlines literally", () => {
+    const piArgs = ["", "path with spaces", "'single' and \"double\"", "$(exit 42); `exit 43`", "\\backslash", "line\nbreak"];
+    const initialPrompt = "--review $(exit 44)\n'quoted'";
+    const command = buildHerdrPiCommand({ piArgs, initialPrompt });
+    const output = execFileSync("sh", ["-c", `pi() { printf '%s\\0' "$@"; }; ${command}`]);
+    assert.deepEqual(output.toString().split("\0").slice(0, -1), [...piArgs, "--", initialPrompt]);
+  });
+
+  it("rejects NUL before creating a pane", async () => {
+    const { exec, calls } = fakeExec();
+    await assert.rejects(launchHerdrAgent({ ...options, initialPrompt: "bad\0prompt" }, exec, env), /NUL/);
+    assert.equal(calls.length, 0);
   });
 
   it("reports CLI spawn failures", async () => {

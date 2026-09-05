@@ -90,15 +90,15 @@ async function spawnChild(
     let target = "";
     if (useHerdr) {
       const child = await launchHerdrAgent(
-        { cwd: ctx.cwd, piArgs: childArgs, initialPrompt, mode },
+        { cwd: ctx.cwd, piArgs: childArgs, initialPrompt },
         (command, args, options) => pi.exec(command, args, options),
       );
-      target = ` as ${child.name} (${child.paneId})`;
+      target = ` in ${child.paneId}`;
     } else {
       launchZellijPane({ name: panelName, cwd: ctx.cwd, invocation: getPiInvocation(childArgs) });
     }
     ctx.ui.notify(
-      `${panelName} opened${target}${initialPrompt ? " with an initial prompt" : ""}.`,
+      `${panelName} ${useHerdr ? "launch submitted" : "opened"}${target}${initialPrompt ? " with an initial prompt" : ""}.${useHerdr ? " Pi readiness is not checked." : ""}`,
       "info",
     );
   } catch (error) {

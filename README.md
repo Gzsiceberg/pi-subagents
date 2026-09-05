@@ -41,25 +41,26 @@ After updating the extension, run `/reload` in Pi.
 
 Herdr is selected automatically when `HERDR_PANE_ID` is set, including when Zellij environment variables are also present. The CLI is resolved from `HERDR_BIN_PATH`, falling back to `herdr` on PATH.
 
-Following Herdr's [agent automation guide](https://herdr.dev/docs/agent-automation/), the extension:
+For Zellij-like prompt delivery latency, the extension uses Herdr's direct pane command surface:
 
 1. Inspects the calling pane's live dimensions, then splits right when its width is at least three times its height (columns/rows), otherwise down. This favors readable columns and typically gives right → down → right as the parent shrinks. Resizes and closed panes are reflected automatically; unavailable geometry falls back to right. The split preserves the parent's working directory without stealing focus.
 2. Reads the new pane ID from the JSON response rather than predicting IDs.
-3. Runs `herdr agent start <unique-name> --kind pi --pane <id>` with the child's session, model, thinking level, and tool selection, waiting up to 30 seconds for interactive readiness.
-4. Sends the optional initial prompt through `herdr agent prompt` only after startup succeeds. It does **not** wait for the work to finish.
+3. Submits `pi` through `herdr pane run <id> <command>`, with the child's session, model, thinking level, tool selection, and optional initial prompt already in Pi's arguments. Each argument is shell-quoted to preserve literal text, including quotes, newlines, and shell metacharacters.
+4. Returns after command submission, without waiting for Herdr's agent readiness detection or sending a separate prompt.
 
-The notification includes the agent name (for example, `branch-a1b2c3d4`) and pane ID. You can use Herdr's CLI separately:
+The notification says **launch submitted**, not ready, and includes the pane ID. No explicit agent name is assigned. Inspect using the returned ID (replace the example below):
 
 ```bash
-herdr agent focus branch-a1b2c3d4
-herdr agent read branch-a1b2c3d4 --source recent-unwrapped --lines 120
-herdr agent prompt branch-a1b2c3d4 "Also check the tests"
-herdr agent wait branch-a1b2c3d4 --until idle --until done --timeout 120000
+herdr pane focus w6:pF
+herdr pane read w6:pF --source recent-unwrapped --lines 120
+# Once Herdr recognizes Pi, agent commands also accept the pane ID:
+herdr agent get w6:pF
+herdr agent prompt w6:pF "Also check the tests"
 ```
 
-Native startup uses Herdr's canonical **`pi` executable in the pane shell**, not the parent's Node executable or source checkout. Ensure that shell resolves the intended Pi installation and configuration environment. The new shell does not inherit arbitrary environment changes made inside the parent Pi process.
+Startup uses **`pi` in the pane shell**, not the parent's Node executable or source checkout. It requires a shell supporting POSIX-style single-quote concatenation (such as sh, bash, zsh, or fish). Ensure that shell resolves the intended Pi installation and configuration environment. The new shell does not inherit arbitrary environment changes made inside the parent Pi process.
 
-If startup is blocked (for example, by a trust dialog), times out, or prompt submission fails, the extension reports the error and keeps the pane and seeded session for inspection. It does not automatically approve dialogs, resend prompts, close potentially live agents, or fall back to Zellij and duplicate work. Inspect the pane, resolve any dialog deliberately, then submit the prompt yourself if needed.
+This fast path does not detect later Pi startup errors, missing executables, or trust dialogs. Inspect the pane if Pi does not start working. Herdr command failures/timeouts are reported and the pane and seeded session are retained. The extension never automatically approves dialogs, retries a launch, closes potentially live agents, or falls back to Zellij and duplicates work.
 
 Exit the child Pi normally (`Ctrl+D`); the Herdr pane returns to its shell.
 
@@ -87,7 +88,7 @@ npm run typecheck
 npm run test:herdr
 ```
 
-The live smoke test exercises the production Herdr launcher against the installed CLI and real interactive Pi. It checks exact delivery of `test` and a multiline prompt containing leading dashes, quotes, and shell metacharacters. A test-only Pi extension captures input and stops it before any model call; no manual typing or API usage is needed. Discovery and tools are disabled in these test children. The test creates sibling panes without focusing them, closes only its own panes on success, and preserves panes/artifacts on failure for inspection.
+The live smoke test exercises the production Herdr launcher against the installed CLI and real interactive Pi. It checks exact delivery of `test` and a multiline prompt containing leading dashes, quotes, and shell metacharacters. A test-only Pi extension captures input and stops it before any model call; no manual typing or API usage is needed. Discovery and tools are disabled in these test children. The test creates sibling panes without focusing them, closes only its own panes on success, and preserves panes/artifacts on failure for inspection. It reports per-command timings, launch submission latency, and actual Pi input delivery latency.
 
 This complements the unit tests for command registration, session branching, and argument construction; it does not yet exercise slash-command dispatch or model responses end-to-end. Run both suites when changing the launcher—mocked CLI success alone cannot verify Herdr's actual argument parsing.
 

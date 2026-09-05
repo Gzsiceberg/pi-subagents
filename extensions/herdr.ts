@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export function isHerdrEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -9,7 +8,6 @@ export interface HerdrLaunchOptions {
   cwd: string;
   piArgs: string[];
   initialPrompt?: string;
-  mode: "standalone" | "fork";
 }
 
 /** Terminal cells are tall; favor readable columns over repeated narrow splits. */
@@ -24,15 +22,25 @@ export function chooseSplitDirection(layoutResponse: unknown, callerPaneId: stri
   return rect.width >= rect.height * 3 ? "right" : "down";
 }
 
-/** Use Herdr's native readiness detection, not sleeps or raw terminal input. */
+/** Quote each argument for the pane shell; never interpret prompt text as shell syntax. */
+export function buildHerdrPiCommand(options: Pick<HerdrLaunchOptions, "piArgs" | "initialPrompt">): string {
+  const args = ["pi", ...options.piArgs];
+  if (options.initialPrompt) args.push("--", options.initialPrompt);
+  return args.map(arg => {
+    if (arg.includes("\0")) throw new Error("Pi arguments cannot contain NUL bytes.");
+    return "'" + arg.replaceAll("'", "'\"'\"'") + "'";
+  }).join(" ");
+}
+
+/** Submit Pi directly, with its initial prompt, without waiting for agent detection. */
 export async function launchHerdrAgent(
   options: HerdrLaunchOptions,
   exec: ExtensionAPI["exec"],
   env: NodeJS.ProcessEnv = process.env,
-): Promise<{ name: string; paneId: string }> {
+): Promise<{ paneId: string }> {
   if (!isHerdrEnvironment(env)) throw new Error("Pi must be running inside a Herdr pane.");
   const binary = env.HERDR_BIN_PATH || "herdr";
-  const name = `${options.mode === "fork" ? "branch" : "agent"}-${randomUUID().slice(0, 8)}`;
+  const command = buildHerdrPiCommand(options);
   let paneId: string | undefined;
 
   async function run(args: string[], timeout = 15_000): Promise<string> {
@@ -51,7 +59,7 @@ export async function launchHerdrAgent(
       direction = chooseSplitDirection(JSON.parse(layout), env.HERDR_PANE_ID!);
     } catch {
       // Layout inspection is read-only and optional on older Herdr versions.
-      // Never retry a split/start/prompt if a later mutating command fails.
+      // Never retry a split/run if a later mutating command fails.
     }
     const output = await run([
       "pane", "split", "--current", "--direction", direction,
@@ -70,17 +78,8 @@ export async function launchHerdrAgent(
     }
     paneId = returnedId;
 
-    await run([
-      "agent", "start", name, "--kind", "pi", "--pane", paneId,
-      "--timeout", "30000", "--", ...options.piArgs,
-    ], 35_000);
-
-    if (options.initialPrompt) {
-      // TEXT is a fixed positional argument, even when it starts with dashes.
-      // Unlike `agent start`, Herdr's prompt parser does not support `--`.
-      await run(["agent", "prompt", name, options.initialPrompt]);
-    }
-    return { name, paneId };
+    await run(["pane", "run", paneId, command]);
+    return { paneId };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     // A timeout/blocked startup can leave a live agent. Never close it, resend a

@@ -34,16 +34,18 @@ it("delivers literal initial prompts to real interactive Pi through real Herdr",
   try {
     for (const [index, prompt] of ["test", "--review 'quotes' $(echo not-a-shell-command)\nsecond line"].entries()) {
       const capture = join(dir, `input-${index}.jsonl`);
+      const started = performance.now();
       const child = await launchHerdrAgent({
         cwd: process.cwd(),
-        mode: index === 0 ? "standalone" : "fork",
         piArgs: ["--no-session", "--no-extensions", "--no-skills", "--no-prompt-templates",
           "--no-context-files", "--no-tools", "--offline", "--no-approve",
           "-e", resolve("test/fixtures/capture-input.ts"), "--capture-input", capture],
         initialPrompt: prompt,
       }, trackedExec);
-      const deadline = Date.now() + 10_000;
+      t.diagnostic(`Launch submitted: ${Math.round(performance.now() - started)}ms`);
+      const deadline = Date.now() + 20_000;
       while (!existsSync(capture) && Date.now() < deadline) await delay(100);
+      t.diagnostic(`Pi input received: ${Math.round(performance.now() - started)}ms`);
       assert.ok(existsSync(capture), `Pi did not receive input in ${child.paneId}`);
       assert.deepEqual(readFileSync(capture, "utf8").trim().split("\n").map(line => JSON.parse(line)), [prompt]);
       const closed = await exec(binary, ["pane", "close", child.paneId], { timeout: 5000 });
