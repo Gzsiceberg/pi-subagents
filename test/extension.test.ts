@@ -4,7 +4,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import subagentsExtension, { buildChildPiArgs } from "../extensions/index.ts";
 
 describe("extension registration", () => {
-  it("registers exactly the two documented slash commands", () => {
+  it("registers the documented commands and compatibility alias", () => {
     const commands: string[] = [];
     const fakePi = {
       registerCommand(name: string) {
@@ -13,7 +13,7 @@ describe("extension registration", () => {
     } as unknown as ExtensionAPI;
 
     subagentsExtension(fakePi);
-    assert.deepEqual(commands, ["sub-agents", "fork-agent"]);
+    assert.deepEqual(commands, ["sub-agents", "branch", "fork-agent"]);
   });
 });
 
@@ -36,6 +36,7 @@ describe("buildChildPiArgs", () => {
         "xhigh",
         "--tools",
         "read,bash,edit,write",
+        "--",
         "Try the alternate implementation",
       ],
     );

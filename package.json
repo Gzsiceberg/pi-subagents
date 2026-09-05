@@ -1,13 +1,14 @@
 {
   "name": "pi-subagents",
   "version": "0.1.0",
-  "description": "Interactive Zellij sub-agents for pi",
+  "description": "Interactive Herdr and Zellij agents with conversation branching for pi",
   "type": "module",
   "license": "MIT",
   "keywords": [
     "pi-package",
     "pi",
     "subagent",
+    "herdr",
     "zellij"
   ],
   "scripts": {
