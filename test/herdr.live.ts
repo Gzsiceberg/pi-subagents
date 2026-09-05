@@ -15,7 +15,7 @@ const exec: ExtensionAPI["exec"] = (command, args, options) => new Promise((reso
   });
 });
 
-it("delivers literal initial prompts to real interactive Pi through real Herdr", { timeout: 120_000 }, async () => {
+it("delivers literal initial prompts to real interactive Pi through real Herdr", { timeout: 120_000 }, async (t) => {
   assert.equal(process.env.HERDR_ENV, "1", "Run this opt-in test inside Herdr");
   assert.ok(process.env.HERDR_PANE_ID);
   const dir = mkdtempSync(join(tmpdir(), "pi-subagents-live-"));
@@ -23,7 +23,9 @@ it("delivers literal initial prompts to real interactive Pi through real Herdr",
   let passed = false;
   // Track only panes created by this test, including ones whose startup fails.
   const trackedExec: ExtensionAPI["exec"] = async (command, args, options) => {
+    const started = performance.now();
     const result = await exec(command, args, options);
+    t.diagnostic(`${args.slice(0, 2).join(" ")}: ${Math.round(performance.now() - started)}ms`);
     if (args[0] === "pane" && args[1] === "split" && result.code === 0) {
       panes.push(JSON.parse(result.stdout).result.pane.pane_id);
     }

@@ -12,6 +12,18 @@ export interface HerdrLaunchOptions {
   mode: "standalone" | "fork";
 }
 
+/** Terminal cells are tall; favor readable columns over repeated narrow splits. */
+export function chooseSplitDirection(layoutResponse: unknown, callerPaneId: string): "right" | "down" {
+  const response = layoutResponse as { result?: { layout?: { panes?: { pane_id?: string; rect?: { width?: number; height?: number } }[] } } };
+  const panes = response?.result?.layout?.panes;
+  const rect = Array.isArray(panes) ? panes.find(pane => pane?.pane_id === callerPaneId)?.rect : undefined;
+  if (!rect || typeof rect.width !== "number" || typeof rect.height !== "number"
+    || !Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) {
+    return "right";
+  }
+  return rect.width >= rect.height * 3 ? "right" : "down";
+}
+
 /** Use Herdr's native readiness detection, not sleeps or raw terminal input. */
 export async function launchHerdrAgent(
   options: HerdrLaunchOptions,
@@ -33,8 +45,16 @@ export async function launchHerdrAgent(
   }
 
   try {
+    let direction: "right" | "down" = "right";
+    try {
+      const layout = await run(["pane", "layout", "--current"], 3_000);
+      direction = chooseSplitDirection(JSON.parse(layout), env.HERDR_PANE_ID!);
+    } catch {
+      // Layout inspection is read-only and optional on older Herdr versions.
+      // Never retry a split/start/prompt if a later mutating command fails.
+    }
     const output = await run([
-      "pane", "split", "--current", "--direction", "right",
+      "pane", "split", "--current", "--direction", direction,
       "--cwd", options.cwd, "--no-focus",
     ]);
     let response;

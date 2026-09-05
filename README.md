@@ -43,7 +43,7 @@ Herdr is selected automatically when `HERDR_PANE_ID` is set, including when Zell
 
 Following Herdr's [agent automation guide](https://herdr.dev/docs/agent-automation/), the extension:
 
-1. Splits the current pane to the right with the parent's working directory, without stealing focus.
+1. Inspects the calling pane's live dimensions, then splits right when its width is at least three times its height (columns/rows), otherwise down. This favors readable columns and typically gives right → down → right as the parent shrinks. Resizes and closed panes are reflected automatically; unavailable geometry falls back to right. The split preserves the parent's working directory without stealing focus.
 2. Reads the new pane ID from the JSON response rather than predicting IDs.
 3. Runs `herdr agent start <unique-name> --kind pi --pane <id>` with the child's session, model, thinking level, and tool selection, waiting up to 30 seconds for interactive readiness.
 4. Sends the optional initial prompt through `herdr agent prompt` only after startup succeeds. It does **not** wait for the work to finish.

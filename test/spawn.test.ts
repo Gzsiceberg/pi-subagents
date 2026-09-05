@@ -66,13 +66,13 @@ describe("Herdr command integration", () => {
     const { commands, calls, ctx, notifications, entries } = setup();
     assert.equal(commands.get("branch")!.handler, commands.get("fork-agent")!.handler);
     await commands.get("branch")!.handler("  Review this\ncarefully  ", ctx);
-    const start = calls[1];
+    const start = calls[2];
     const sessionFile = start[start.indexOf("--session") + 1];
     const [header, ...copied] = readFileSync(sessionFile, "utf8").trim().split("\n").map(line => JSON.parse(line));
     assert.equal(header.parentSession, "/sessions/parent.jsonl");
     assert.deepEqual(copied, entries);
     assert.deepEqual(start.slice(start.indexOf("--model")), ["--model", "test/model", "--thinking", "high", "--tools", "read,bash"]);
-    assert.equal(calls[2].at(-1), "Review this\ncarefully");
+    assert.equal(calls[3].at(-1), "Review this\ncarefully");
     assert.equal(notifications.at(-1)?.level, "info");
     assert.match(notifications.at(-1)!.message, /branch-.*w1:p2/);
   });
@@ -80,8 +80,8 @@ describe("Herdr command integration", () => {
   it("seeds an empty standalone session without sending an empty prompt", async () => {
     const { commands, calls, ctx } = setup();
     await commands.get("sub-agents")!.handler("   ", ctx);
-    assert.equal(calls.length, 2);
-    const start = calls[1];
+    assert.equal(calls.length, 3);
+    const start = calls[2];
     const lines = readFileSync(start[start.indexOf("--session") + 1], "utf8").trim().split("\n");
     assert.equal(lines.length, 1);
     assert.equal(JSON.parse(lines[0]).parentSession, undefined);
@@ -90,7 +90,7 @@ describe("Herdr command integration", () => {
   it("reports startup failure without success and retains the recoverable session", async () => {
     const { commands, calls, ctx, notifications } = setup(true);
     await commands.get("branch")!.handler("work", ctx);
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].level, "error");
     assert.match(notifications[0].message, /agent_not_ready/);
