@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "test": "node --test test/*.test.ts",
+    "test:herdr": "node --test test/herdr.live.ts",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {

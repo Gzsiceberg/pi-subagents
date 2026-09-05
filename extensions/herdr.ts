@@ -44,7 +44,8 @@ export async function launchHerdrAgent(
       throw new Error("Herdr pane split returned invalid JSON; inspect the layout before retrying.");
     }
     const returnedId = response?.result?.pane?.pane_id;
-    if (typeof returnedId !== "string" || !/^w\d+:p\d+$/.test(returnedId)) {
+    // Herdr IDs are opaque handles; pane suffixes are not necessarily numeric.
+    if (typeof returnedId !== "string" || !returnedId.trim()) {
       throw new Error("Herdr pane split did not return a valid result.pane.pane_id; inspect the layout before retrying.");
     }
     paneId = returnedId;
@@ -55,8 +56,9 @@ export async function launchHerdrAgent(
     ], 35_000);
 
     if (options.initialPrompt) {
-      // End option parsing so leading dashes and multiline prompts remain literal.
-      await run(["agent", "prompt", name, "--", options.initialPrompt]);
+      // TEXT is a fixed positional argument, even when it starts with dashes.
+      // Unlike `agent start`, Herdr's prompt parser does not support `--`.
+      await run(["agent", "prompt", name, options.initialPrompt]);
     }
     return { name, paneId };
   } catch (error) {

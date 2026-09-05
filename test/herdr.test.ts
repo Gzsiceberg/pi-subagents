@@ -49,7 +49,7 @@ describe("Herdr native launch", () => {
       },
       {
         command: env.HERDR_BIN_PATH,
-        args: ["agent", "prompt", child.name, "--", prompt],
+        args: ["agent", "prompt", child.name, prompt],
         options: { cwd: options.cwd, timeout: 15_000 },
       },
     ]);
@@ -66,7 +66,14 @@ describe("Herdr native launch", () => {
     assert.equal(first.calls[0].command, "herdr");
   });
 
-  for (const stdout of ["not json", "null", "{}", '{"result":{"pane":{"pane_id":42}}}']) {
+  it("accepts opaque non-numeric pane IDs returned by Herdr", async () => {
+    const { exec, calls } = fakeExec([success('{"result":{"pane":{"pane_id":"w6:pF"}}}'), success()]);
+    const child = await launchHerdrAgent(options, exec, env);
+    assert.equal(child.paneId, "w6:pF");
+    assert.ok(calls[1].args.includes("w6:pF"));
+  });
+
+  for (const stdout of ["not json", "null", "{}", '{"result":{"pane":{"pane_id":42}}}', '{"result":{"pane":{"pane_id":""}}}']) {
     it(`stops on malformed split response: ${stdout}`, async () => {
       const { exec, calls } = fakeExec([success(stdout)]);
       await assert.rejects(launchHerdrAgent(options, exec, env), /Herdr pane split/);

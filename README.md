@@ -82,6 +82,13 @@ Pi loads its normal settings, extensions, context files, skills, and prompts in 
 ```bash
 npm test
 npm run typecheck
+
+# Opt-in: run inside Herdr with pi available in the pane shell
+npm run test:herdr
 ```
+
+The live smoke test exercises the production Herdr launcher against the installed CLI and real interactive Pi. It checks exact delivery of `test` and a multiline prompt containing leading dashes, quotes, and shell metacharacters. A test-only Pi extension captures input and stops it before any model call; no manual typing or API usage is needed. Discovery and tools are disabled in these test children. The test creates sibling panes without focusing them, closes only its own panes on success, and preserves panes/artifacts on failure for inspection.
+
+This complements the unit tests for command registration, session branching, and argument construction; it does not yet exercise slash-command dispatch or model responses end-to-end. Run both suites when changing the launcher—mocked CLI success alone cannot verify Herdr's actual argument parsing.
 
 The Zellij spawning design is based on the neighboring MIT-licensed `../pi-interactive-subagents` project, especially `pi-extension/subagents/{cmux,index,session}.ts`. This package does not import that project at runtime.
